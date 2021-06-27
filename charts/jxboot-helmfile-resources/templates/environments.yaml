@@ -1,0 +1,109 @@
+{{- $jx := .Values.jxRequirements -}}
+{{- $secrets := .Values.secrets -}}
+{{- $gitUrlPathPrefix := "" -}}
+{{- if eq "bitbucketserver" $jx.cluster.gitKind }}
+{{- $gitUrlPathPrefix = "/scm" -}}
+{{- end }}
+{{- $lighthouseEngine := .Values.lighthouseEngine -}}
+{{- range $key, $env := .Values.jxRequirements.environments }}
+---
+apiVersion: jenkins.io/v1
+kind: Environment
+metadata:
+  labels:
+    env: "{{ $env.key }}"
+    team: {{ $env.namespace | default "jx" }}
+  name: "{{ $env.key }}"
+spec:
+{{- if hasKey $env "repository" }}
+  source:
+    ref: "master"
+    url: {{ $jx.cluster.gitServer | default "https://github.com" }}{{ $gitUrlPathPrefix }}/{{ $env.owner | default $jx.cluster.environmentGitOwner }}/{{ $env.repository }}.git
+{{- end }}
+
+{{- if eq "dev" $env.key }}
+  kind: Development
+  label: Development
+  namespace: {{ $env.namespace | default "jx" }}
+  promotionStrategy: "{{ $env.promotionStrategy | default "Never" }}"
+  webHookEngine: {{ $jx.webhook | default "lighthouse" | title | quote }}
+  teamSettings:
+    appsRepository: http://chartmuseum.jenkins-x.io
+{{- if and (hasKey $jx "deployOptions") (or ($jx.deployOptions.canary) ($jx.deployOptions.hpa)) }}
+    deployOptions:
+{{- if $jx.deployOptions.canary }}
+      canary: true
+{{- end }}
+{{- if $jx.deployOptions.hpa }}
+      hpa: true
+{{- end }}
+{{- end }}
+    defaultScheduler:
+      apiVersion: jenkins.io/v1
+      kind: Scheduler
+{{- if eq $lighthouseEngine "tekton" }}
+      name: jx-meta-pipeline
+{{- else }}
+      name: default
+{{- end -}}
+{{- if hasKey $jx.cluster "dockerRegistryOrg" }}
+    dockerRegistryOrg: "{{ $jx.cluster.dockerRegistryOrg }}"
+{{- else }}
+    dockerRegistryOrg: "{{ $jx.cluster.project }}"
+{{- end }}
+    envOrganisation: {{ $jx.cluster.environmentGitOwner }}
+    gitServer: https://github.com
+{{- if $jx.cluster.gitPublic }}
+    gitPublic: true
+{{- end }}
+    kubeProvider: "{{ $jx.cluster.provider }}"
+    pipelineUsername: "{{ $jx.pipelineUser.username | default "jenkins-x-labs-bot" }}"
+    pipelineUserEmail: "{{ $jx.pipelineUser.email | default "jenkins-x@googlegroups.com" }}"
+    prowConfig: Scheduler
+{{- if $jx.storage }}
+    storageLocations:
+{{- range $key, $val := $jx.storage }}
+{{- if eq "logs" $val.name }}
+    - bucketUrl: {{ $val.url }}
+      classifier: logs
+{{- end }}
+{{- if eq "reports" $val.name }}
+    - bucketUrl: {{ $val.url }}
+      classifier: reports
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- if $jx.quickstartLocations }}
+    quickstartLocations:
+{{ toYaml $jx.quickstartLocations | indent 6 }}
+{{- end }}
+{{- else if eq "staging" $env.key }}
+  kind: Permanent
+  label: Staging
+  namespace: {{ $env.namespace | default "jx-staging" }}
+  promotionStrategy: "{{ $env.promotionStrategy | default "Auto" }}"
+  order: 100
+  {{- if hasKey $env "requirementsYaml" }}
+  teamSettings:
+    bootRequirements: {{ toYaml $env.requirementsYaml | indent 4 }}
+  {{- end }}
+{{- else }}
+  kind: Permanent
+  label: {{ title $env.key }}
+  order: 500
+  promotionStrategy: "{{ $env.promotionStrategy | default "Manual" }}"
+{{- if hasKey $env "requirementsYaml" }}
+  teamSettings:
+    bootRequirements: {{ toYaml $env.requirementsYaml | indent 4 }}
+{{- end }}
+{{- if $env.namespace }}
+  namespace: "{{ $env.namespace }}"
+{{- else }}
+  namespace: "jx-{{ $env.key }}"
+{{- end -}}
+{{- end -}}
+{{- if $env.remoteCluster }}
+  remoteCluster: true
+{{- end }}
+{{- end -}}

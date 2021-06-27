@@ -1,0 +1,48 @@
+{{- if and (or (eq "lighthouse" .Values.jxRequirements.webhook) (eq "prow" .Values.jxRequirements.webhook)) (not .Values.istio.enabled) }}
+apiVersion: {{ .Values.ingress.apiVersion | default "networking.k8s.io/v1" }}
+kind: Ingress
+metadata:
+  annotations:
+{{- template "ingressAnnotations" . }}
+  name: hook
+spec:
+  rules:
+  - http:
+      paths:
+{{- if eq .Values.ingress.apiVersion "networking.k8s.io/v1beta1" }}
+      - backend:
+          serviceName: hook
+          servicePort: 80
+{{- else }}
+      - pathType: {{ .Values.ingress.pathType | default "ImplementationSpecific" }}
+        backend:
+          service:
+            name: hook
+            port:
+              number: 80
+{{- end }}
+        path: "/hook"
+{{- if .Values.ingress.customHosts.hook }}
+    host: {{ .Values.ingress.customHosts.hook }}
+{{- else if .Values.jxRequirements.ingress.domain }}
+    host: {{ .Values.ingress.prefix.hook }}{{ .Values.jxRequirements.ingress.namespaceSubDomain }}{{ .Values.jxRequirements.ingress.domain }}
+{{- end }}
+{{- if .Values.jxRequirements.ingress.tls.enabled }}
+  tls:
+  - hosts:
+  {{- if .Values.ingress.customHosts.hook }}
+    - {{ .Values.ingress.customHosts.hook }}
+  {{- else }}
+    - {{ .Values.ingress.prefix.hook }}{{ .Values.jxRequirements.ingress.namespaceSubDomain }}{{ .Values.jxRequirements.ingress.domain }}
+  {{- end }}
+{{- if .Values.hook.ingress.tls.secretName }}
+    secretName: "{{ .Values.hook.ingress.tls.secretName }}"
+{{- else if .Values.jxRequirements.ingress.tls.secretName }}
+    secretName: "{{ .Values.jxRequirements.ingress.tls.secretName }}"
+{{- else if .Values.jxRequirements.ingress.tls.production }}
+    secretName: "tls-{{ .Values.jxRequirements.ingress.domain | replace "." "-" }}-p"
+{{- else }}
+    secretName: "tls-{{ .Values.jxRequirements.ingress.domain | replace "." "-" }}-s"
+{{- end }}
+{{- end }}
+{{- end }}

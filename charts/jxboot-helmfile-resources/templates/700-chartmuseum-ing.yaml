@@ -1,0 +1,51 @@
+{{- if and (not (or (eq "bucketrepo" .Values.jxRequirements.repository) (not .Values.jxRequirements.repository))) (not .Values.istio.enabled) }}
+apiVersion: {{ .Values.ingress.apiVersion | default "networking.k8s.io/v1" }}
+kind: Ingress
+metadata:
+  annotations:
+  {{- template "ingressAnnotations" . }}
+  name: chartmuseum
+spec:
+  rules:
+  - http:
+      paths:
+{{- if eq .Values.ingress.apiVersion "networking.k8s.io/v1beta1" }}
+      - backend:
+          serviceName: jenkins-x-chartmuseum
+          servicePort: 8080
+{{- else }}
+      - pathType: {{ .Values.ingress.pathType | default "ImplementationSpecific" }}
+        backend:
+          service:
+            name: jenkins-x-chartmuseum
+            port:
+              number: 8080
+{{- end }}
+{{- if eq "NodePort" .Values.jxRequirements.ingress.serviceType }}
+        path: "/chartmuseum"
+{{- else if .Values.ingress.customHosts.chartmuseum }}
+        path: "/"
+    host: {{ .Values.ingress.customHosts.chartmuseum }}
+{{- else if .Values.jxRequirements.ingress.domain }}
+        path: "/"
+    host: {{ .Values.ingress.prefix.chartmuseum }}{{ .Values.jxRequirements.ingress.namespaceSubDomain }}{{ .Values.jxRequirements.ingress.domain }}
+{{- end }}
+{{- if .Values.jxRequirements.ingress.tls.enabled }}
+  tls:
+  - hosts:
+  {{- if .Values.ingress.customHosts.chartmuseum }}
+    - {{ .Values.ingress.customHosts.chartmuseum }}
+  {{- else }}
+    - {{ .Values.ingress.prefix.chartmuseum }}{{ .Values.jxRequirements.ingress.namespaceSubDomain }}{{ .Values.jxRequirements.ingress.domain }}
+  {{- end }}
+{{- if .Values.chartmuseum.ingress.tls.secretName }}
+    secretName: "{{ .Values.chartmuseum.ingress.tls.secretName }}"
+{{- else if .Values.jxRequirements.ingress.tls.secretName }}
+    secretName: "{{ .Values.jxRequirements.ingress.tls.secretName }}"
+{{- else if .Values.jxRequirements.ingress.tls.production }}
+    secretName: "tls-{{ .Values.jxRequirements.ingress.domain | replace "." "-" }}-p"
+{{- else }}
+    secretName: "tls-{{ .Values.jxRequirements.ingress.domain | replace "." "-" }}-s"
+{{- end }}
+{{- end }}
+{{- end }}

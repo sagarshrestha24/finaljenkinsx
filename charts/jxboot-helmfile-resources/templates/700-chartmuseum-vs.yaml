@@ -1,0 +1,20 @@
+{{- if and (not (or (eq "bucketrepo" .Values.jxRequirements.repository) (not .Values.jxRequirements.repository))) (.Values.istio.enabled) }}
+apiVersion: {{ .Values.istio.apiVersion }}
+kind: VirtualService
+metadata:
+  name: chartmuseum
+spec:
+  gateways:
+{{- if .Values.istio.createGateway }}
+  - jx-gateway
+{{- else }}
+  - {{ .Values.istio.gateway.name }}
+{{- end }}
+  hosts:
+    - chartmuseum{{ .Values.jxRequirements.ingress.namespaceSubDomain }}{{ .Values.jxRequirements.ingress.domain }}
+  http:
+  - route:
+    - destination:
+        host: chartmuseum
+      weight: 100
+{{- end }}

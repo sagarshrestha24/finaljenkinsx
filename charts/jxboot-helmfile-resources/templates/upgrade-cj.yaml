@@ -1,0 +1,64 @@
+{{- if eq .Values.jxRequirements.autoUpdate.enabled true }}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: jx-boot-upgrade
+  labels:
+    app: jenkins-x-updatebot
+    release: jx
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: jenkins-x-updatebot
+        spec:
+          initContainers:
+            - command:
+              - jx
+              - secret
+              - copy
+              - --name
+              - jx-boot-job-env-vars
+              - --ns
+              - jx-git-operator
+              - --to
+              - jx
+              name: copy-secret
+              image: "ghcr.io/jenkins-x/jx-boot:{{ .Values.versions.jx }}"
+              imagePullPolicy: Always
+              resources: {}
+              terminationMessagePath: /dev/termination-log
+              terminationMessagePolicy: File
+          containers:
+          - args:
+            - env
+            - --git-setup
+{{- if .Values.jxRequirements.autoUpdate.autoMerge }}
+            - --auto-merge
+{{- end }}
+            command:
+            - jx-updatebot
+            envFrom:
+            - secretRef:
+                name: jx-boot-job-env-vars
+                optional: true
+            image: "gcr.io/jenkinsxio/jx-updatebot:{{ .Values.versions.updatebot }}"
+            imagePullPolicy: Always
+            name: updatebot
+            resources: {}
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+          dnsPolicy: ClusterFirst
+          restartPolicy: Never
+          schedulerName: default-scheduler
+          securityContext: {}
+          terminationGracePeriodSeconds: 30
+          serviceAccountName: tekton-bot
+  successfulJobsHistoryLimit: 3
+  schedule: {{ .Values.jxRequirements.autoUpdate.schedule | default "0 0 * * *" | quote }}
+  suspend: false
+{{- end }}
